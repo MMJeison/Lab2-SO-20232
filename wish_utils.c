@@ -12,12 +12,23 @@ void execute_cd(char *newpath) {
   chdir(path);
 }
 
-void execute_path() {}
-
-void print_error_msg() {
-  char error_message[30] = "An error has occurred\n";
-  write(STDERR_FILENO, error_message, strlen(error_message));
+void execute_path(char *mypath[100], char *paths) {
+  int i = 0;
+  char *path = strtok_r(paths, " ", &paths);
+  while (path != NULL) {
+    mypath[i] = strdup(path);
+    // verificamos si el ultimo caracter es un '/'
+    if (mypath[i][strlen(mypath[i]) - 1] != '/') {
+      // si no lo es, le agregamos uno
+      mypath[i] = strcat(mypath[i], "/");
+    }
+    path = strtok_r(NULL, " ", &paths);
+    i++;
+  }
+  mypath[i] = "";
 }
+
+void print_error_msg(char *msg) { write(STDERR_FILENO, msg, strlen(msg)); }
 
 void trim(char *str) {
   char *p = str;
