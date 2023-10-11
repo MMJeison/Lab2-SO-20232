@@ -1,6 +1,5 @@
 #include "wish_utils.h"
 #include <fcntl.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
