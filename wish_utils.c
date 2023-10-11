@@ -46,3 +46,52 @@ void trim(char *str) {
     *i = '\0';
   }
 }
+
+// definimos una struct para almacenar los comandos ejecutados, tipo lista
+// doblemente enlazada
+typedef struct node {
+  char *command;
+  struct node *next;
+  struct node *prev;
+} node_dl;
+
+node_dl *prev_item(node_dl *node) {
+  if (node->prev == NULL) {
+    return node;
+  }
+  return node->prev;
+}
+
+node_dl *next_item(node_dl *node) {
+  if (node->next == NULL) {
+    return node;
+  }
+  return node->next;
+}
+
+typedef struct list {
+  node_dl *head;
+  node_dl *tail;
+} list_dl;
+
+// inicializamos la lista
+list_dl *init_list() {
+  list_dl *list = malloc(sizeof(list_dl));
+  list->head = NULL;
+  list->tail = NULL;
+  return list;
+}
+
+// agregamos un elemento al inicio de la lista
+void add_first(list_dl *list, char *command) {
+  node_dl *new_node = malloc(sizeof(node_dl));
+  new_node->command = strdup(command);
+  new_node->next = list->head;
+  new_node->prev = NULL;
+  if (list->head != NULL) {
+    list->head->prev = new_node;
+  } else {
+    list->tail = new_node;
+  }
+  list->head = new_node;
+}

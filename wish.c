@@ -1,6 +1,6 @@
 #include "wish_utils.h"
 #include <fcntl.h>
-#include <ncurses.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,7 +10,8 @@
 #define MAX_SIZE 1024
 #define HISTOY_SIZE 20
 
-// char *mypath[100] = {"bli", "bla", "/bin/", ""};
+pthread_mutex_t lock;
+
 char *mypath[100] = {"/bin/", ""};
 char CURRENT_PATH[MAX_SIZE];
 char ERROR_MESSAGE[30] = "An error has occurred\n";
@@ -127,6 +128,7 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
+  // obtenemos el directorio actual
   getcwd(CURRENT_PATH, sizeof(CURRENT_PATH));
 
   FILE *fp;
@@ -186,6 +188,7 @@ int main(int argc, char *argv[]) {
           execute_exit(0);
         }
         execute_cd(aux);
+        // actualizamos el directorio actual
         getcwd(CURRENT_PATH, sizeof(CURRENT_PATH));
       } else if (strcmp(command_string, "path") == 0) {
         execute_path(mypath, s);
