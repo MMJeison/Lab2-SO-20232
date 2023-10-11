@@ -9,8 +9,6 @@
 #define MAX_SIZE 1024
 #define HISTOY_SIZE 20
 
-pthread_mutex_t lock;
-
 char *mypath[100] = {"/bin/", ""};
 char CURRENT_PATH[MAX_SIZE];
 char ERROR_MESSAGE[30] = "An error has occurred\n";
