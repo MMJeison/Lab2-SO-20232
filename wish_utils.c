@@ -31,12 +31,18 @@ void execute_path(char *mypath[100], char *paths) {
 void print_error_msg(char *msg) { write(STDERR_FILENO, msg, strlen(msg)); }
 
 void trim(char *str) {
-  char *p = str;
-  int l = strlen(p);
-
-  while (isspace(p[l - 1]))
-    p[--l] = 0;
-  while (*p && isspace(*p))
-    ++p, --l;
-  memmove(str, p, l + 1);
+  char *i = str;
+  // eliminamos los esiacios al inicio
+  while (isspace(*i)) {
+    i++;
+  }
+  if (*i == '\0') {
+    *str = '\0';
+    return;
+  }
+  memmove(str, i, strlen(i) + 1);
+  // eliminamos los espacios al final
+  for (i = str + strlen(str) - 1; isspace(*i); i--) {
+    *i = '\0';
+  }
 }
