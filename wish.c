@@ -12,7 +12,7 @@
 #include <unistd.h>
 
 #define MAX_SIZE 1024
-#define HISTOY_SIZE 50
+#define HISTOY_SIZE 30
 
 typedef struct node_d node_d;
 typedef struct list_d list_d;
@@ -26,6 +26,7 @@ struct node_d {
 struct list_d {
   struct node_d *head;
   struct node_d *tail;
+  int size;
 };
 
 node_d *create_node(char *command) {
@@ -40,6 +41,7 @@ list_d *create_list() {
   list_d *list = malloc(sizeof(list_d));
   list->head = NULL;
   list->tail = NULL;
+  list->size = 0;
   return list;
 }
 
@@ -72,21 +74,6 @@ void destroy_list(list_d *list) {
   free(list);
 }
 
-void insert_first(list_d *list, char *command) {
-  node_d *node = create_node(command);
-  if (list->head == NULL) {
-    list->head = node;
-    list->tail = node;
-  } else {
-    if (strcmp(list->head->command, command) == 0) {
-      return;
-    }
-    node->next = list->head;
-    list->head->prev = node;
-    list->head = node;
-  }
-}
-
 void remove_first(list_d *list) {
   if (list->head == NULL) {
     return;
@@ -102,6 +89,41 @@ void remove_first(list_d *list) {
   free(node);
 }
 
+void remove_last(list_d *list) {
+  if (list->tail == NULL) {
+    return;
+  }
+  node_d *node = list->tail;
+  list->tail = list->tail->prev;
+  if (list->tail == NULL) {
+    list->head = NULL;
+  } else {
+    list->tail->next = NULL;
+  }
+  free(node->command);
+  free(node);
+}
+
+void insert_first(list_d *list, char *command) {
+  node_d *node = create_node(command);
+  if (list->head == NULL) {
+    list->head = node;
+    list->tail = node;
+  } else {
+    if (strcmp(list->head->command, command) == 0) {
+      return;
+    }
+    node->next = list->head;
+    list->head->prev = node;
+    list->head = node;
+  }
+  if (list->size < HISTOY_SIZE) {
+    list->size++;
+  } else {
+    remove_last(list);
+  }
+}
+
 void insert_last(list_d *list, char *command) {
   node_d *node = create_node(command);
   if (list->head == NULL) {
@@ -114,6 +136,11 @@ void insert_last(list_d *list, char *command) {
     node->prev = list->tail;
     list->tail->next = node;
     list->tail = node;
+  }
+  if (list->size < HISTOY_SIZE) {
+    list->size++;
+  } else {
+    remove_first(list);
   }
 }
 
@@ -362,6 +389,22 @@ int main(int argc, char *argv[]) {
         exit(0);
       }
       str[c] = '\0';
+      s2 = str;
+      trim(s2);
+      if (strlen(s2) == 0) {
+        continue;
+      }
+      insert_first(history, s2);
+      // abrimos el archivo en modo de escritura y lo sobreescribimos
+      fh = fopen(pathfile, "w");
+      if (fh != NULL) {
+        node_d *node = history->head;
+        while (node != NULL) {
+          fprintf(fh, "%s\n", node->command);
+          node = node->next;
+        }
+        fclose(fh);
+      }
       // fgets(str, MAX_SIZE, stdin);
     } else {
       if (currCom == nroCom) {
@@ -370,24 +413,11 @@ int main(int argc, char *argv[]) {
         exit(0);
       }
       strcpy(str, commands[currCom++]);
-    }
-    s2 = str;
-    trim(s2);
-    if (strlen(s2) == 0) {
-      continue;
-    }
-    insert_first(history, s2);
-    // abrimos el archivo en modo de escritura y lo sobreescribimos
-    fh = fopen(pathfile, "w");
-    if (fh != NULL) {
-      node_d *node = history->head;
-      int k = 0;
-      while (node != NULL && k < HISTOY_SIZE) {
-        fprintf(fh, "%s\n", node->command);
-        node = node->next;
-        k++;
+      s2 = str;
+      trim(s2);
+      if (strlen(s2) == 0) {
+        continue;
       }
-      fclose(fh);
     }
 
     while ((s = strtok_r(s2, "&", &s2)) != NULL) {
