@@ -6,14 +6,120 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+// iclimos librerias necesaria para deshabilitar el buffering de líneas, el modo
+// canónico y el eco
+#include <termios.h>
+#include <unistd.h>
+
 #define MAX_SIZE 1024
-#define HISTOY_SIZE 20
+#define HISTOY_SIZE 50
+
+typedef struct node_d node_d;
+typedef struct list_d list_d;
+
+struct node_d {
+  char *command;
+  struct node_d *next;
+  struct node_d *prev;
+};
+
+struct list_d {
+  struct node_d *head;
+  struct node_d *tail;
+};
+
+node_d *create_node(char *command) {
+  node_d *node = malloc(sizeof(node_d));
+  node->command = strdup(command);
+  node->next = NULL;
+  node->prev = NULL;
+  return node;
+}
+
+list_d *create_list() {
+  list_d *list = malloc(sizeof(list_d));
+  list->head = NULL;
+  list->tail = NULL;
+  return list;
+}
+
+node_d *prev_item(list_d *list, node_d *node) {
+  if (node == NULL) {
+    return NULL;
+  }
+  return node->prev;
+}
+
+node_d *next_item(list_d *list, node_d *node) {
+  if (node == NULL) {
+    return list->head;
+  }
+  if (node->next == NULL) {
+    return node;
+  }
+  return node->next;
+}
+
+void destroy_list(list_d *list) {
+  node_d *current = list->head;
+  node_d *next;
+  while (current != NULL) {
+    next = current->next;
+    free(current->command);
+    free(current);
+    current = next;
+  }
+  free(list);
+}
+
+void insert_first(list_d *list, char *command) {
+  node_d *node = create_node(command);
+  if (list->head == NULL) {
+    list->head = node;
+    list->tail = node;
+  } else {
+    if (strcmp(list->head->command, command) == 0) {
+      return;
+    }
+    node->next = list->head;
+    list->head->prev = node;
+    list->head = node;
+  }
+}
+
+void remove_first(list_d *list) {
+  if (list->head == NULL) {
+    return;
+  }
+  node_d *node = list->head;
+  list->head = list->head->next;
+  if (list->head == NULL) {
+    list->tail = NULL;
+  } else {
+    list->head->prev = NULL;
+  }
+  free(node->command);
+  free(node);
+}
+
+void insert_last(list_d *list, char *command) {
+  node_d *node = create_node(command);
+  if (list->head == NULL) {
+    list->head = node;
+    list->tail = node;
+  } else {
+    if (strcmp(list->tail->command, command) == 0) {
+      return;
+    }
+    node->prev = list->tail;
+    list->tail->next = node;
+    list->tail = node;
+  }
+}
 
 char *mypath[100] = {"/bin/", ""};
 char CURRENT_PATH[MAX_SIZE];
 char ERROR_MESSAGE[30] = "An error has occurred\n";
-char PREVIOUS_COMMANDS[HISTOY_SIZE][MAX_SIZE];
-int current_command = 0;
 
 int notExistFileOrDirectory(char *path) {
   if (access(path, F_OK) == -1) {
@@ -110,8 +216,54 @@ int procces_comand_ls(char *entr, char *aux) {
   return 0;
 }
 
+struct termios term;
+
+void deshabilitar_buffering() {
+  // deshabilitamos el buffering de líneas, el modo canónico y el eco
+  tcgetattr(STDIN_FILENO, &term);
+  term.c_lflag &= ~(ICANON | ECHO);
+  tcsetattr(STDIN_FILENO, TCSANOW, &term);
+}
+
+void enable_buffering() {
+  // habilitamos el buffering de líneas, el modo canónico y el eco
+  tcgetattr(STDIN_FILENO, &term);
+  term.c_lflag |= ICANON | ECHO;
+  tcsetattr(STDIN_FILENO, TCSANOW, &term);
+}
+
 int main(int argc, char *argv[]) {
+  deshabilitar_buffering();
+  // obtenemos el directorio actual
+  getcwd(CURRENT_PATH, sizeof(CURRENT_PATH));
+  // creamos la lista que almacena el historial de comandos
+  list_d *history = create_list();
+  char pathfile[MAX_SIZE];
+  strcpy(pathfile, CURRENT_PATH);
+  strcat(pathfile, "/commands-history.txt");
+  // verificamos si existe el archivo
+  FILE *fh;
+  if (notExistFileOrDirectory(pathfile)) {
+    // si no existe lo creamos
+    int idf = open(pathfile, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    close(idf);
+  } else {
+    fh = fopen(pathfile, "r");
+    if (fh != NULL) {
+      char line[MAX_SIZE];
+      while (fgets(line, MAX_SIZE, fh) != NULL) {
+        char *ax = strchr(line, '\n');
+        if (ax != NULL) {
+          *ax = '\0';
+        }
+        insert_last(history, line);
+      }
+      fclose(fh);
+    }
+  }
+
   char str[MAX_SIZE];
+  char straux[MAX_SIZE];
   char *s;
   char *command_string;
   int fd;
@@ -122,42 +274,122 @@ int main(int argc, char *argv[]) {
 
   if (argc > 2) {
     print_error_msg(ERROR_MESSAGE);
+    enable_buffering();
     exit(1);
   }
 
-  // obtenemos el directorio actual
-  getcwd(CURRENT_PATH, sizeof(CURRENT_PATH));
-
   FILE *fp;
+  char commands[100][MAX_SIZE];
+  int nroCom = 0;
   if (argc == 2) {
     fp = fopen(argv[1], "r");
     if (fp == NULL) {
       print_error_msg(ERROR_MESSAGE);
+      enable_buffering();
       exit(1);
+    } else {
+      while (fgets(commands[nroCom], MAX_SIZE, fp) != NULL) {
+        insert_last(history, commands[nroCom]);
+        nroCom++;
+      }
+      strcpy(commands[nroCom], "exit");
+      fclose(fp);
     }
   }
-
+  int currCom = 0;
   do {
     if (argc == 1) {
-      printf("whish> ");
-      fgets(str, MAX_SIZE, stdin);
-    } else {
-      fgets(str, MAX_SIZE, fp);
-      if (feof(fp)) {
-        fclose(fp);
+      printf("\rwhish> ");
+      int c = 0, ch;
+      str[c] = '\0';
+      straux[0] = '\0';
+      // creamos un puntero al primer elemento de la lista de historial
+      node_d *node = NULL;
+      while ((ch = getchar()) != '\n' && ch != EOF) {
+        // si se presiona la tecla de retroceso
+        if (ch == 127) {
+          node = NULL;
+          if (c > 0) {
+            printf("\b \b");
+            --c;
+          }
+        } else if (ch == 27) {
+          getchar();
+          int aux = getchar();
+          if (aux == 65) {
+            // flecha arriba
+            if (node == NULL) {
+              strcpy(straux, str);
+            }
+            node = next_item(history, node);
+            if (node != NULL) {
+              while (c > 0) {
+                printf("\b \b");
+                --c;
+              }
+              strcpy(str, node->command);
+              // actualizamos el contador de caracteres
+              c = strlen(str);
+              printf("\rwhish> %s", str);
+            }
+          } else if (aux == 66) {
+            // flecha abajo
+            while (c > 0) {
+              printf("\b \b");
+              --c;
+            }
+            node = prev_item(history, node);
+            if (node != NULL) {
+              strcpy(str, node->command);
+            } else {
+              strcpy(str, straux);
+            }
+            // actualizamos el contador de caracteres
+            c = strlen(str);
+            printf("\rwhish> %s", str);
+          }
+        } else {
+          node = NULL;
+          printf("%c", ch);
+          str[c++] = ch;
+        }
+        str[c] = '\0';
+      }
+      printf("\n");
+      if (str[c] == EOF) {
+        destroy_list(history);
+        enable_buffering();
         exit(0);
       }
+      str[c] = '\0';
+      // fgets(str, MAX_SIZE, stdin);
+    } else {
+      if (currCom == nroCom) {
+        destroy_list(history);
+        enable_buffering();
+        exit(0);
+      }
+      strcpy(str, commands[currCom++]);
     }
-    s2 = str;
-    while (*s2 != '\n') {
-      ++s2;
-    }
-    *s2 = '\0';
     s2 = str;
     trim(s2);
     if (strlen(s2) == 0) {
       continue;
     }
+    insert_first(history, s2);
+    // abrimos el archivo en modo de escritura y lo sobreescribimos
+    fh = fopen(pathfile, "w");
+    if (fh != NULL) {
+      node_d *node = history->head;
+      int k = 0;
+      while (node != NULL && k < HISTOY_SIZE) {
+        fprintf(fh, "%s\n", node->command);
+        node = node->next;
+        k++;
+      }
+      fclose(fh);
+    }
+
     while ((s = strtok_r(s2, "&", &s2)) != NULL) {
       trim(s);
       if (strlen(s) == 0) {
@@ -168,21 +400,21 @@ int main(int argc, char *argv[]) {
         char *aux = strtok_r(s, " ", &s);
         if (aux != NULL) {
           print_error_msg(ERROR_MESSAGE);
-          // continue;*
-          execute_exit(0);
+          continue;
         }
+        // habilitamos el buffering de líneas, el modo canónico y el eco
+        destroy_list(history);
+        enable_buffering();
         execute_exit(0);
       } else if (strcmp(command_string, "cd") == 0) {
         if (strlen(s) == 0) {
           print_error_msg(ERROR_MESSAGE);
-          // continue;*
-          execute_exit(0);
+          continue;
         }
         char *aux = strtok_r(s, " ", &s);
         if (strtok_r(s, " ", &s) != NULL) {
           print_error_msg(ERROR_MESSAGE);
-          // continue;*
-          execute_exit(0);
+          continue;
         }
         execute_cd(aux);
         // actualizamos el directorio actual
@@ -305,11 +537,14 @@ int main(int argc, char *argv[]) {
       int status;
       waitpid(subprocs[i], &status, 0);
       // si el proceso hijo termino con un valor de retorno distinto de 0
-      if (WEXITSTATUS(status) != 0) {
-        // terminamos el proceso padre con el mismo valor de retorno
-        execute_exit(WEXITSTATUS(status));
-      }
+      // if (WEXITSTATUS(status) != 0) {
+      //   // terminamos el proceso padre con el mismo valor de retorno
+      //   enable_buffering();
+      //   execute_exit(WEXITSTATUS(status));
+      // }
     }
     subproc_count = 0; // Reseteamos el contador de procesos hijos
   } while (1);
+  enable_buffering();
+  return 0;
 }
